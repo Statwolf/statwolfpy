@@ -1,0 +1,15 @@
+box: python:3.7.0
+test:
+  steps:
+    - script:
+      name: deps
+      code: |
+        make env
+    - script:
+      name: unit
+      code: |
+        make test
+    - script:
+      name: integration
+      code: |
+        make examples

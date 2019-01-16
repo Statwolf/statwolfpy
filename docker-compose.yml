@@ -1,0 +1,7 @@
+version: '3'
+services:
+  develop:
+    volumes:
+      - '.:/app'
+    image: 'python:3.7.0'
+    command: 'bash -c "cd /app && make env && make develop"'
