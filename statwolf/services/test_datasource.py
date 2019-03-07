@@ -2,7 +2,7 @@ from unittest import TestCase
 from unittest.mock import MagicMock
 
 from statwolf.services import datasource
-from statwolf.services.datasource import Datasource, DatasourceInstance
+from statwolf.services.datasource import Datasource, DatasourceInstance, Upload, Parser, Blob
 
 from statwolf.mocks import ContextMock, ResponseMock
 
@@ -90,3 +90,48 @@ class DatasourceInstanceTestCase(TestCase):
         })
 
         self.assertEqual(res, data["Data"])
+
+    def test_itShouldOpenAFileAsLineStream(self):
+        f = {}
+        self.context.openFile = MagicMock(return_value=f)
+
+        u = Upload('yolo', 'label', self.context)
+        p = u.file('local path')
+
+        self.context.openFile.assert_called_with('local path', 'r')
+        self.assertIsInstance(p, Parser)
+        self.assertEqual(p._context, self.context)
+        self.assertEqual(p._sourceid, 'yolo')
+        self.assertEqual(p._label, 'label')
+        self.assertEqual(p._source, f)
+
+    def test_JsonParseShouldDONothing(self):
+        s = {}
+        p = Parser('yolo', 'label', s, self.context)
+        b = p.json()
+
+        self.assertIsInstance(b, Blob)
+        self.assertEqual(b._sourceid, 'yolo')
+        self.assertEqual(b._label, 'label')
+        self.assertEqual(b._source, s)
+
+        batch = [ 1, 2, 3 ]
+        self.assertEqual(b._parser(batch), batch)
+
+    def test_ParserShouldAllowCustomParsers(self):
+        y = []
+        def custom(x): return y
+
+        s = {}
+        p = Parser('yolo', 'label', s, self.context)
+        b = p.custom(custom)
+
+        self.assertIsInstance(b, Blob)
+        self.assertEqual(b._sourceid, 'yolo')
+        self.assertEqual(b._label, 'label')
+        self.assertEqual(b._source, s)
+
+        batch = [ 1, 2, 3 ]
+        self.assertEqual(b._parser(batch), y)
+
+

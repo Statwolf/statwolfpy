@@ -3,6 +3,8 @@ from statwolf.exceptions import *
 from statwolf.services import *
 from statwolf import services, http
 
+from azure.storage.blob import BlockBlobService
+
 class Context:
     def __init__(self, config):
         if not "host" in config or not "username" in config or not "password" in config:
@@ -16,9 +18,17 @@ class Context:
 
         self.loader = getattr
         self.http = http.create(self.config)
+        self.openFile = open
+        self._blockBlobService = BlockBlobService
 
     def toDashboard(self, url):
         return self.config['root'] + url
+
+    def blob(self):
+        url = self.toDashboard('/v1/datasetimport/env')
+        config = self.http.post(url).json()["Data"]
+
+        return self._blockBlobService(connection_string=config["connectionString"])
 
 def _internal_create(context, service):
     serviceModule = context.loader(services, service)

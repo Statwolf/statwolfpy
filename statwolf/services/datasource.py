@@ -56,6 +56,53 @@ class DatasourceInstance(BaseService):
         l = lambda payload: self.post(self._baseUrl + '/getHints', payload)
         return list(map(lambda i: Field(self._sourceid, i, l), items))
 
+class Context:
+    def __init__(self, parser):
+        self.tempFile = tempfile.TemporaryFile()
+        self.parser = parser;
+
+    def write(self, data):
+        self.tempFile.write(self.parser(data))
+
+    def close(self):
+        self.tempFile.close()
+
+    def getFile(self):
+        return self.tempFile
+
+class Blob(BaseService):
+    def __init__(self, sourceid, label, source, parser, context):
+        super(Blob, self).__init__(context)
+        self._sourceid = sourceid
+        self._label = label
+        self._source = source
+        self._parser = parser
+
+    def upload(self):
+        b = self._context.blob()
+        c = Context(self._parser)
+        while self._source(c) != False:
+            pass
+
+class Parser(BaseService):
+    def __init__(self, sourceid, label, source, context):
+        super(Parser, self).__init__(context)
+        self._sourceid = sourceid
+        self._label = label
+        self._source = source
+
+    def custom(self, handler):
+        return Blob(self._sourceid, self._label, self._source, handler, self._context)
+
+class Upload(BaseService):
+    def __init__(self, sourceid, label, context):
+        super(Upload, self).__init__(context)
+        self._sourceid = sourceid
+        self._label = label
+
+    def source(self, handler):
+        return Parser(self._sourceid, self._label, handler, self._context)
+
 class Datasource(BaseService):
     def __init__(self, context):
         super(Datasource, self).__init__(context)
@@ -65,6 +112,9 @@ class Datasource(BaseService):
 
     def explore(self, sourceid):
         return DatasourceInstance(sourceid, self._context)
+
+    def upload(self, sourceid, label):
+        pass
 
 def create(context):
     return Datasource(context)

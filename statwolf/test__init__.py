@@ -37,6 +37,35 @@ class ContextTestCase(TestCase):
         ctx = Context(config())
         self.assertEqual(ctx.toDashboard('/a path'), '/dashboard/path/a path')
 
+    def test_itShouldWrapOpenFileFunction(self):
+        ctx = Context(config())
+        self.assertEqual(ctx.openFile, open)
+
+    def test_itShouldHaveAFactoryForBlobService(self):
+        class BlobConfig:
+            def __init__(self):
+                self.config = {
+                    "Success": True,
+                    "Data": {
+                        "connectionString": "the connection string",
+                        "baseUrl": "the base url"
+                    }
+                }
+            def json(self):
+                return self.config
+
+        service = {}
+        blobConfig = BlobConfig()
+        ctx = Context(config())
+        ctx._blockBlobService = MagicMock(return_value=service)
+        ctx.http.post = MagicMock(return_value=blobConfig)
+
+        b = ctx.blob()
+
+        ctx.http.post.assert_called_with('/dashboard/path/v1/datasetimport/env')
+        ctx._blockBlobService.assert_called_with(connection_string="the connection string")
+        self.assertEqual(b, service)
+
 class InitTestCase(TestCase):
 
     def test_itShouldCreateTheMainService(self):
