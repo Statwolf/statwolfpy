@@ -1,4 +1,6 @@
 from statwolf.services.baseservice import BaseService
+from statwolf import StatwolfException
+from os.path import basename
 
 class Field:
     def __init__(self, sourceid, field, getHint):
@@ -56,19 +58,22 @@ class DatasourceInstance(BaseService):
         l = lambda payload: self.post(self._baseUrl + '/getHints', payload)
         return list(map(lambda i: Field(self._sourceid, i, l), items))
 
-class Context:
-    def __init__(self, parser):
-        self.tempFile = tempfile.TemporaryFile()
-        self.parser = parser;
+class UploaderPanel:
+    def __init__(self, tmpFile, parser):
+        self._file = tmpFile
+        self._parser = parser
 
-    def write(self, data):
-        self.tempFile.write(self.parser(data))
+    def push(self, data):
+        data = list(map(self._parser, data))
+        self._file.write('\n'.join(data))
+
+    def remove(self):
+        self._file.remove()
 
     def close(self):
-        self.tempFile.close()
+        self._file.close()
 
-    def getFile(self):
-        return self.tempFile
+        return self._file.location()
 
 class Blob(BaseService):
     def __init__(self, sourceid, label, source, parser, context):
@@ -76,13 +81,45 @@ class Blob(BaseService):
         self._sourceid = sourceid
         self._label = label
         self._source = source
-        self._parser = parser
+        self._panel = UploaderPanel(context.tempFile(), parser)
 
     def upload(self):
-        b = self._context.blob()
-        c = Context(self._parser)
-        while self._source(c) != False:
+        while self._source(self._panel) is not False:
             pass
+        location = self._panel.close()
+        filename = basename(location)
+        blob, baseUrl = self._context.blob()
+
+        blob.create_blob_from_path('uploads', filename, location)
+        blobUrl = baseUrl + 'uploads/' + filename
+
+        commandPath = self._context.toDashboard('/v1/datasetimport/manageDatasetCreation')
+        context = self.post(commandPath, {
+            "command": "createNewDataset",
+            "context": {
+                "datasetid": self._sourceid,
+                "label": self._label,
+                "provider": "RemoteFile"
+            }
+        })
+
+        context["payload"] = {
+            "path": blobUrl
+        }
+
+        try:
+            for stage in [ 'populateMetadata', 'prepareForUpload', 'completeUpload' ]:
+                if 'Code' in context:
+                    raise StatwolfException(context['Message'])
+
+                context = self.post(commandPath, {
+                    "command": stage,
+                    "context": context
+                })
+
+            return DatasourceInstance(self._sourceid, self._context)
+        finally:
+            self._panel.remove()
 
 class Parser(BaseService):
     def __init__(self, sourceid, label, source, context):
@@ -114,7 +151,7 @@ class Datasource(BaseService):
         return DatasourceInstance(sourceid, self._context)
 
     def upload(self, sourceid, label):
-        pass
+        return Upload(sourceid, label, self._context)
 
 def create(context):
     return Datasource(context)

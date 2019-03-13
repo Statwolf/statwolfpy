@@ -1,7 +1,7 @@
 from statwolf.exceptions import *
 
 from statwolf.services import *
-from statwolf import services, http
+from statwolf import services, http, tempfile
 
 from azure.storage.blob import BlockBlobService
 
@@ -28,7 +28,10 @@ class Context:
         url = self.toDashboard('/v1/datasetimport/env')
         config = self.http.post(url).json()["Data"]
 
-        return self._blockBlobService(connection_string=config["connectionString"])
+        return self._blockBlobService(connection_string=config["connectionString"]),  config["baseUrl"]
+
+    def tempFile(self):
+        return tempfile.TempFile.create()
 
 def _internal_create(context, service):
     serviceModule = context.loader(services, service)

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import statwolf
 from statwolf import Context
 from statwolf.http import Http
+from statwolf.tempfile import TempFile
 
 def config():
     return {
@@ -33,6 +34,12 @@ class ContextTestCase(TestCase):
         self.assertEqual(ctx.loader, getattr)
         self.assertIs(type(ctx.http), Http)
 
+    def test_itCallsTempFileFactory(self):
+        ctx = Context(config())
+        f = ctx.tempFile()
+        self.assertIsInstance(f, TempFile)
+        f.close()
+
     def test_itExtendsTheUrlWithDashboardBase(self):
         ctx = Context(config())
         self.assertEqual(ctx.toDashboard('/a path'), '/dashboard/path/a path')
@@ -60,11 +67,12 @@ class ContextTestCase(TestCase):
         ctx._blockBlobService = MagicMock(return_value=service)
         ctx.http.post = MagicMock(return_value=blobConfig)
 
-        b = ctx.blob()
+        b, baseUrl = ctx.blob()
 
         ctx.http.post.assert_called_with('/dashboard/path/v1/datasetimport/env')
         ctx._blockBlobService.assert_called_with(connection_string="the connection string")
         self.assertEqual(b, service)
+        self.assertEqual(baseUrl, 'the base url')
 
 class InitTestCase(TestCase):
 
