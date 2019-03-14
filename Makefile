@@ -16,6 +16,6 @@ develop: check
 	while inotifywait -r -e create ./statwolf --exclude ''\\.pyc$$''; do make test; done
 
 examples: check
-	source ./env/bin/activate && for SCRIPT in ./examples/*; do PYTHONPATH="." python $$SCRIPT; done
+	source ./env/bin/activate && for SCRIPT in ./examples/*.py; do PYTHONPATH="." python $$SCRIPT; done
 
 .PHONY: env develop check
