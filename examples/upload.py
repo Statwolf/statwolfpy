@@ -6,6 +6,8 @@ host = os.environ.get('SW_HOST', 'https://a.statwolf.endpoint/dashboard')
 username = os.environ.get('SW_USERNAME', 'the user')
 password = os.environ.get('SW_PASSWORD', 'a real password')
 
+localdir = os.path.dirname(os.path.abspath(__file__))
+
 datasource = statwolf.create({
     "host": host,
     "username": username,
@@ -17,4 +19,10 @@ def up(c):
 
     return False
 
-ds = datasource.upload("sourceid", "my label").source(up).custom(lambda x : json.dumps(x)).upload()
+# upload json from custom location
+ds = datasource.upload("sourceid_custom_source", "my label_source").source(up).json().upload()
+print(ds.schema())
+
+# upload json data from file
+ds = datasource.upload("sourceid_file", "my label_file").file(localdir + '/test-data').text().upload()
+print(ds.schema())

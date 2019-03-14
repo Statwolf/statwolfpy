@@ -2,6 +2,8 @@ from statwolf.services.baseservice import BaseService
 from statwolf import StatwolfException
 from os.path import basename
 
+import json
+
 class Field:
     def __init__(self, sourceid, field, getHint):
         self._sourceid = sourceid;
@@ -123,6 +125,12 @@ class Parser(BaseService):
         self._label = label
         self._source = source
 
+    def text(self):
+        return self.custom(lambda x : x.rstrip('\n\r'))
+
+    def json(self):
+        return self.custom(lambda x : json.dumps(x))
+
     def custom(self, handler):
         return Blob(self._sourceid, self._label, self._source, handler, self._context)
 
@@ -131,6 +139,19 @@ class Upload(BaseService):
         super(Upload, self).__init__(context)
         self._sourceid = sourceid
         self._label = label
+
+    def file(self, path):
+        localFile = self._context.openFile(path, 'r')
+
+        def loader(panel):
+            batch = list(self._context.islice(localFile, 1000))
+            if batch == []:
+                localFile.close()
+                return False
+            else:
+                panel.push(batch)
+
+        return self.source(loader)
 
     def source(self, handler):
         return Parser(self._sourceid, self._label, handler, self._context)
