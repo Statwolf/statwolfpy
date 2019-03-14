@@ -7,6 +7,8 @@ from statwolf import StatwolfException
 
 from statwolf.mocks import ContextMock, ResponseMock, FileMock
 
+import json
+
 class DatasourceFactoryTestCase(TestCase):
 
     def test_itShouldCreateTheDatasourceService(self):
@@ -226,3 +228,44 @@ class DatasourceInstanceTestCase(TestCase):
             blob.upload()
 
         tf.remove.assert_called_with()
+
+    def test_jsonParserShouldJustSerializeTheJson(self):
+        p = Parser("source", 'label', 'handler', self.context)
+        b = p.json()
+        d = { 'a': 'test', 'json': 99 }
+
+        self.assertEqual(json.dumps(d), b._panel._parser(d))
+
+    def test_fileSourceShouldReadAFileByBatch(self):
+        fm = FileMock()
+        fm.close = MagicMock()
+
+        panel = UploaderPanel('yolo', 'yolo')
+        panel.push = MagicMock()
+
+        self.context.openFile = MagicMock(return_value=fm)
+        self.context.islice = MagicMock(side_effect=[
+            [ 'a', 'b', 'c' ],
+            []
+        ])
+
+        p = Upload('sourceid', 'label', self.context).file('local path')
+
+        self.assertEqual(p._source(panel), None)
+        self.assertEqual(p._source(panel), False)
+
+        self.context.openFile.assert_called_with('local path', 'r')
+        self.context.islice.assert_has_calls([
+            call(fm, 1000),
+            call(fm, 1000)
+        ])
+        panel.push.assert_called_with([ 'a', 'b', 'c' ])
+        fm.close.assert_called_with()
+
+    def test_textParserShouldJustRemoveTrailingLineTerminators(self):
+        text = Parser("source", 'label', 'handler', self.context).text()
+
+        self.assertEqual('  yolo', text._panel._parser('  yolo'))
+        self.assertEqual('  yolo', text._panel._parser('  yolo\n'))
+        self.assertEqual('  yolo', text._panel._parser('  yolo\r\n'))
+

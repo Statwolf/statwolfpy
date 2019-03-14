@@ -5,6 +5,7 @@ import statwolf
 from statwolf import Context
 from statwolf.http import Http
 from statwolf.tempfile import TempFile
+from itertools import islice
 
 def config():
     return {
@@ -47,6 +48,10 @@ class ContextTestCase(TestCase):
     def test_itShouldWrapOpenFileFunction(self):
         ctx = Context(config())
         self.assertEqual(ctx.openFile, open)
+
+    def test_itShuldWrapIsliceFunction(self):
+        ctx = Context(config())
+        self.assertEqual(ctx.islice, islice)
 
     def test_itShouldHaveAFactoryForBlobService(self):
         class BlobConfig:

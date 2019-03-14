@@ -4,6 +4,7 @@ from statwolf.services import *
 from statwolf import services, http, tempfile
 
 from azure.storage.blob import BlockBlobService
+from itertools import islice
 
 class Context:
     def __init__(self, config):
@@ -20,6 +21,7 @@ class Context:
         self.http = http.create(self.config)
         self.openFile = open
         self._blockBlobService = BlockBlobService
+        self.islice = islice
 
     def toDashboard(self, url):
         return self.config['root'] + url
