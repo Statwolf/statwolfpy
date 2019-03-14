@@ -94,28 +94,23 @@ class Blob(BaseService):
         blobUrl = baseUrl + 'uploads/' + filename
 
         commandPath = self._context.toDashboard('/v1/datasetimport/manageDatasetCreation')
-        context = self.post(commandPath, {
-            "command": "createNewDataset",
-            "context": {
-                "datasetid": self._sourceid,
-                "label": self._label,
-                "provider": "RemoteFile"
-            }
-        })
-
-        context["payload"] = {
-            "path": blobUrl
-        }
 
         try:
-            for stage in [ 'populateMetadata', 'prepareForUpload', 'completeUpload' ]:
-                if 'Code' in context:
-                    raise StatwolfException(context['Message'])
+            context = self.post(commandPath, {
+                "command": "createNewDataset",
+                "context": {
+                    "wizard": False,
+                    "datasetid": self._sourceid,
+                    "label": self._label,
+                    "provider": "RemoteFile",
+                    "payload": {
+                        "path": blobUrl
+                    }
+                }
+            })
 
-                context = self.post(commandPath, {
-                    "command": stage,
-                    "context": context
-                })
+            if 'Code' in context:
+                raise StatwolfException(context['Message'])
 
             return DatasourceInstance(self._sourceid, self._context)
         finally:

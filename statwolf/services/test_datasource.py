@@ -174,21 +174,6 @@ class DatasourceInstanceTestCase(TestCase):
             }
         }), ResponseMock({
             "Data": {
-                "return from": "populateMetadata",
-                "some context": "goes here"
-            }
-        }), ResponseMock({
-            "Data": {
-                "return from": "prepareForUpload",
-                "some context": "goes here"
-            }
-        }), ResponseMock({
-            "Data": {
-                "return from": "completeUpload",
-                "some context": "goes here"
-            }
-        }), ResponseMock({
-            "Data": {
                 "some": "metadata"
             }
         })]
@@ -202,35 +187,14 @@ class DatasourceInstanceTestCase(TestCase):
         self.context.http.post.assert_has_calls([
             call('/root/v1/datasetimport/manageDatasetCreation', {
                 "command":"createNewDataset",
-                "context":{
+                "context": {
+                    "wizard": False,
                     "datasetid":"yolo",
                     "label":"label",
-                    "provider":"RemoteFile"
-                }
-            }),
-            call('/root/v1/datasetimport/manageDatasetCreation', {
-                "command":"populateMetadata",
-                "context":{
-                    "return from": "createNewDataset",
-                    "some context": "goes here",
+                    "provider":"RemoteFile",
                     "payload": {
                         "path": "base url/uploads/file_name"
                     }
-                }
-            }),
-            call('/root/v1/datasetimport/manageDatasetCreation', {
-                "command":"prepareForUpload",
-                "context":{
-                    "return from": "populateMetadata",
-                    "some context": "goes here"
-                }
-
-            }),
-            call('/root/v1/datasetimport/manageDatasetCreation', {
-                "command":"completeUpload",
-                "context":{
-                    "return from": "prepareForUpload",
-                    "some context": "goes here"
                 }
             })
         ])

@@ -17,4 +17,4 @@ def up(c):
 
     return False
 
-ds = u.upload("sourceid", "my label").source(up).custom(lambda x : json.dumps(x)).upload()
+ds = datasource.upload("sourceid", "my label").source(up).custom(lambda x : json.dumps(x)).upload()
