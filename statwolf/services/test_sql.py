@@ -6,6 +6,10 @@ from statwolf.services.sql import SQL
 
 from statwolf.mocks import ContextMock, ResponseMock
 
+from statwolf import StatwolfException
+
+import json
+
 class SQLFactoryTestCase(TestCase):
 
     def test_itShouldCreateAnSQLObject(self):
@@ -56,4 +60,30 @@ class SQLTestCase(TestCase):
             }
         })
 
-        self.assertEqual(res, data)
+        self.assertEqual(res, {
+            "meta": [{
+                "name": "1",
+                "type": "UInt8"
+            }],
+            "data": [{
+                "1": 1
+            }]
+        })
+
+    def test_itShouldExceptOnError(self):
+        context = ContextMock()
+
+        response = ResponseMock({
+            "Success": False,
+            "Data": {
+                "Code": -1,
+                "Message": 'Error: ' + json.dumps({ 'response': json.dumps({ "message": "Error message" }) } )
+            }
+        })
+        context.http.post = MagicMock(return_value=response)
+
+        def call():
+            s = SQL(context)
+            s.query('invalid!')
+
+        self.assertRaises(StatwolfException, call)

@@ -1,5 +1,8 @@
 from statwolf.services.baseservice import BaseService
+from statwolf import StatwolfException
 from copy import deepcopy
+
+import json
 
 class SQL(BaseService):
 
@@ -18,7 +21,13 @@ class SQL(BaseService):
         params = deepcopy(self._baseParams)
         params['query']['statement_clickhouse'] = statement
 
-        return self.post(self._baseUrl, params)['data']
+        res = self.post(self._baseUrl, params)
+
+        if 'Code' in res:
+            error = json.loads(res['Message'].replace('Error: ', ''))
+            raise StatwolfException(json.loads(error['response'])['message'])
+
+        return { key: res['data'][key] for key in ['data', 'meta'] }
 
 def create(context):
     return SQL(context)
