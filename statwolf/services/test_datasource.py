@@ -2,7 +2,7 @@ from unittest import TestCase
 from unittest.mock import MagicMock, call
 
 from statwolf.services import datasource
-from statwolf.services.datasource import Datasource, DatasourceInstance, Upload, Parser, Blob, UploaderPanel
+from statwolf.services.datasource import Datasource, DatasourceInstance, Upload, Parser, Blob, UploaderPanel, PipelineBuilder, Pipeline
 from statwolf import StatwolfException
 
 from statwolf.mocks import ContextMock, ResponseMock, FileMock
@@ -269,3 +269,132 @@ class DatasourceInstanceTestCase(TestCase):
         self.assertEqual('  yolo', text._panel._parser('  yolo\n'))
         self.assertEqual('  yolo', text._panel._parser('  yolo\r\n'))
 
+    def test_datasourceInstanceShouldAllocateAQueryBuilder(self):
+        d = DatasourceInstance('sourceid', self.context)
+        q = d.builder()
+
+        self.assertIsInstance(q, PipelineBuilder)
+        self.assertEqual(q._baseUrl, d._baseUrl)
+        self.assertEqual(q._context, d._context)
+        self.assertEqual(q._params, {
+            "table": 'sourceid',
+            "filter": {},
+            "timeframe": {
+                "period":"last7days",
+                "granularity":"day"
+            },
+            "granularity": "overall",
+            "dimensions": [],
+            "metrics": [],
+            "sort": [],
+            "take": "5000"
+        })
+
+    def test_datasourceInstanceShouldBuildAQueryPipeline(self):
+        pb = PipelineBuilder('sourceid', 'the url', self.context)
+        pipeline = pb.build()
+
+        self.assertIsInstance(pipeline, Pipeline)
+        self.assertEqual(pipeline._context, self.context)
+
+    def test_pipelineBuilderShuoldUpdateLoaderParameters(self):
+        pb = PipelineBuilder('sourceid', 'the url', self.context)
+
+        pb.timeframe('2019-01-01', '2019-02-02').dimensions(['yolo', 'yolo2']).metrics(['yolo3', 'yolo4']).where([
+            [ 'pippolo', '==', 'plutolo' ],
+            [ 'yolo', '>', 100 ]
+        ]).sort([
+            [ 'country', 'asc' ]
+        ]).take("100")
+
+        self.assertEqual(pb._params, {
+            "table": 'sourceid',
+            "filter": {
+                "field_0": "pippolo",
+                "operator_0": "==",
+                "value_0": { "value": "plutolo", "noSuggestions": True },
+                "selector_0": "AND",
+                "field_1": "yolo",
+                "operator_1": ">",
+                "value_1": { "value": 100, "noSuggestions": True },
+                "selector_1": "AND"
+            },
+            "timeframe": {
+                "dateFrom": "2019-01-01",
+                "dateTo": "2019-02-02"
+            },
+            "granularity": "overall",
+            "dimensions": [ 'yolo', 'yolo2' ],
+            "metrics": [ 'yolo3', 'yolo4' ],
+            "sort": [ [ 'country', 'asc' ] ],
+            "take": "100"
+        })
+
+    def test_pipelineShouldRunThePipelineAndGetTheResult(self):
+        reply = ResponseMock({
+            "Success": True,
+            "Data": {
+                "data": {
+                    "meta": [{
+                        "name": "a",
+                        "type": "String",
+                        "internalName": "a"
+                    }, {
+                        "name": "number_of_rows",
+                        "type": "UInt64",
+                        "internalName": "number_of_rows"
+                    }],
+                    "data": [{
+                        "a": "3",
+                        "number_of_rows": 1
+                    }],
+                    "totals": None,
+                    "rows": 1,
+                    "rows_before_limit_at_least": 3,
+                    "hasErrors": False,
+                    "errorMessage": None,
+                    "display": "overall"
+                    },
+                "hints": {}
+            }
+        })
+        self.context.http.post = MagicMock(return_value=reply)
+
+        params = {
+            "my params": "my value"
+        }
+
+        p = Pipeline('base url', params, self.context)
+
+        def transform(element, panel):
+            return {
+                "dataset": 'the dataset',
+                "meta": 'my meta',
+                "element": element
+            }
+
+        p.transform(transform)
+
+        self.assertEqual(p.execute(), {
+            "dataset": 'the dataset',
+            "meta": "my meta",
+            "element": {
+                "dataset": [{
+                    "a": "3",
+                    "number_of_rows": 1
+                }],
+                "meta": {
+                    "schema": [{
+                        "name": "a",
+                        "type": "String",
+                        "internalName": "a"
+                    }, {
+                        "name": "number_of_rows",
+                        "type": "UInt64",
+                        "internalName": "number_of_rows"
+                    }]
+                }
+            }
+        })
+
+        self.context.http.post.assert_called_with('base url/$$base', params)

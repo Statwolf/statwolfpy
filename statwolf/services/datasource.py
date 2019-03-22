@@ -3,6 +3,8 @@ from statwolf import StatwolfException
 from os.path import basename
 
 import json
+from dill.source import getsource
+from textwrap import dedent
 
 class Field:
     def __init__(self, sourceid, field, getHint):
@@ -27,6 +29,121 @@ class Field:
     def __repr__(self):
         return self._field;
 
+class Pipeline(BaseService):
+    def __init__(self, baseUrl, params, context):
+        super(Pipeline, self).__init__(context)
+
+        self._pipeline = []
+
+        def loader(element, panel):
+            params = panel['params']
+            res = panel['http'].post(params['baseUrl'] + '/$$base', params['params']).json()["Data"]
+
+            return {
+                "meta": {
+                    "schema": res["data"]["meta"]
+                },
+                "dataset": res["data"]["data"]
+            }
+
+        self.transform(loader, {
+            'params': params,
+            'baseUrl': baseUrl
+        })
+
+    def transform(self, handler, params={}):
+        source = dedent(getsource(handler))
+        source = source + 'panel["newElement"] = ' + handler.__name__ + '(element, panel)\n';
+
+        self._pipeline.append({
+            'source': source,
+            'params': json.dumps(params)
+        })
+
+        return self
+
+    def execute(self):
+        element = {
+            "meta": {},
+            "dataset": []
+        }
+
+        for h in self._pipeline:
+            panel = {
+                'http': self._context.http,
+                'params': json.loads(h['params'])
+            }
+            exec(h['source'], {}, { 'element': element, 'panel': panel })
+            element = panel['newElement']
+
+        return element
+
+class PipelineBuilder(BaseService):
+    def __init__(self, sourceid, baseUrl, context):
+        super(PipelineBuilder, self).__init__(context)
+
+        self._baseUrl = baseUrl
+
+        self._params = {
+            "table": sourceid,
+            "filter": {},
+            "timeframe": {
+                "period":"last7days",
+                "granularity":"day"
+            },
+            "granularity": "overall",
+            "dimensions": [],
+            "metrics": [],
+            "sort": [],
+            "take": "5000"
+        }
+
+    def timeframe(self, dateFrom, dateTo):
+        self._params["timeframe"] = {
+            "dateFrom": dateFrom,
+            "dateTo": dateTo
+        }
+
+        return self
+
+    def dimensions(self, dimensions):
+        self._params["dimensions"] = dimensions
+
+        return self
+
+    def metrics(self, metrics):
+        self._params["metrics"] = metrics
+
+        return self
+
+    def where(self, filters):
+        index = 0
+
+        final = {}
+        for row in filters:
+            final["field_" + str(index)] = row[0]
+            final["operator_" + str(index)] = row[1]
+            final["value_" + str(index)] = { "value": row[2], "noSuggestions": True }
+            final["selector_" + str(index)] = 'AND'
+            index += 1
+
+        self._params["filter"] = final
+
+        return self
+
+    def sort(self, sorting):
+        self._params["sort"] = sorting
+
+        return self
+
+    def take(self, take):
+        self._params["take"] = take
+
+        return self
+
+    def build(self):
+        return Pipeline(self._baseUrl, self._params, self._context)
+
 class DatasourceInstance(BaseService):
     def __init__(self, sourceid, context):
         super(DatasourceInstance, self).__init__(context)
@@ -36,6 +153,9 @@ class DatasourceInstance(BaseService):
         self._meta = self.post(self._baseUrl + '/getSchema', {
             "sourceid": sourceid
         })
+
+    def builder(self):
+        return PipelineBuilder(self._sourceid, self._baseUrl, self._context)
 
     def schema(self):
         return self._meta.get("schema", {})
