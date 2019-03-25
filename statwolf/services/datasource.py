@@ -37,7 +37,7 @@ class Pipeline(BaseService):
 
         def loader(element, panel):
             params = panel['params']
-            res = panel['http'].post(params['baseUrl'] + '/$$base', params['params']).json()["Data"]
+            res = panel['statwolf'].post(params['baseUrl'] + '/$$base', params['params']).json()["Data"]
 
             return {
                 "meta": {
@@ -70,7 +70,7 @@ class Pipeline(BaseService):
 
         for h in self._pipeline:
             panel = {
-                'http': self._context.http,
+                'statwolf': self._context.http,
                 'params': json.loads(h['params'])
             }
             exec(h['source'], {}, { 'element': element, 'panel': panel })
