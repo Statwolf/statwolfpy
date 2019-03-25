@@ -20,9 +20,9 @@ def up(c):
     return False
 
 # upload json from custom location
-ds = datasource.upload("sourceid_custom_source", "my label_source").source(up).json().upload()
+ds = datasource.delete("sourceid_custom_source").upload("sourceid_custom_source", "my label_source").source(up).json().upload()
 print(ds.schema())
 
 # upload json data from file
-ds = datasource.upload("sourceid_file", "my label_file").file(localdir + '/test-data').text().upload()
+ds = datasource.delete("sourceid_file").upload("sourceid_file", "my label_file").file(localdir + '/test-data').text().upload()
 print(ds.schema())

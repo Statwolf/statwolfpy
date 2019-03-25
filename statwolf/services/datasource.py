@@ -289,5 +289,15 @@ class Datasource(BaseService):
     def upload(self, sourceid, label):
         return Upload(sourceid, label, self._context)
 
+    def delete(self, sourceid):
+        self.post(self._context.toDashboard('/v1/datasetimport/manageDatasetCreation'), {
+            "command":"deleteDataset",
+            "context": {
+                "datasetid": sourceid
+            }
+        })
+
+        return self
+
 def create(context):
     return Datasource(context)

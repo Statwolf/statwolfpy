@@ -398,3 +398,18 @@ class DatasourceInstanceTestCase(TestCase):
         })
 
         self.context.http.post.assert_called_with('base url/$$base', params)
+
+    def test_itShouldDeleteAdatasource(self):
+        self.context.http.post = MagicMock()
+
+        d = datasource.create(self.context)
+        newD = d.delete('a source id')
+
+        self.assertEqual(d, newD)
+        self.context.http.post.assert_called_with('/root/v1/datasetimport/manageDatasetCreation', {
+            "command":"deleteDataset",
+            "context": {
+                "datasetid": "a source id"
+            }
+        })
+

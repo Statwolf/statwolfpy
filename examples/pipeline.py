@@ -8,7 +8,7 @@ password = os.environ.get('SW_PASSWORD', 'a real password')
 service = statwolf.create({ "host": host, "username": username, "password": password }, "datasource")
 
 # Load datasource
-source = service.explore("uploaded_sourceid_file_mammeta_2_yolo")
+source = service.explore("clickhouse_source")
 pipeline = source.builder().timeframe('2000-01-01', '2019-05-01').dimensions(["a"]).sort([["a", "asc"]]).build()
 
 def transformation(element, panel):
