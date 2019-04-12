@@ -8,14 +8,20 @@ password = os.environ.get('SW_PASSWORD', 'a real password')
 service = statwolf.create({ "host": host, "username": username, "password": password }, "datasource")
 
 # Load datasource
-source = service.explore("clickhouse_source")
-pipeline = source.builder().timeframe('2000-01-01', '2019-05-01').dimensions(["a"]).sort([["a", "asc"]]).build()
+source = service.explore("uploaded_sourceid_file")
 
 def transformation(element, panel):
     element['meta']['pau'] = "new field"
 
     return element
 
-pipeline = pipeline.transform(transformation)
+pipeline = source.builder()\
+        .calculated('yolo', 'formatDateTime(toDate(\'1987-04-22\'), \'%V\')')\
+        .customMetric('myCount', operator="count")\
+        .join('my join', 'any left', ['yolo'], ['mytext'], sql='select formatDateTime(toDate(\'1987-04-22\'), \'%V\') as yolo, \'birthday\' as mytext')\
+        .dimensions(['yolo', 'mytext'])\
+        .metrics(['myCount'])\
+        .steps()\
+        .transform(transformation).build()
 
 print(pipeline.execute())

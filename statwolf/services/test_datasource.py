@@ -2,7 +2,7 @@ from unittest import TestCase
 from unittest.mock import MagicMock, call
 
 from statwolf.services import datasource
-from statwolf.services.datasource import Datasource, DatasourceInstance, Upload, Parser, Blob, UploaderPanel, PipelineBuilder, Pipeline
+from statwolf.services.datasource import Datasource, DatasourceInstance, Upload, Parser, Blob, UploaderPanel, PipelineBuilder, StepBuilder, Pipeline
 from statwolf import StatwolfException
 
 from statwolf.mocks import ContextMock, ResponseMock, FileMock
@@ -287,14 +287,18 @@ class DatasourceInstanceTestCase(TestCase):
             "dimensions": [],
             "metrics": [],
             "sort": [],
-            "take": "5000"
+            "take": "5000",
+            "testing": {
+                "calculated": {},
+                "metrics": {}
+            }
         })
 
     def test_datasourceInstanceShouldBuildAQueryPipeline(self):
         pb = PipelineBuilder('sourceid', 'the url', self.context)
-        pipeline = pb.build()
+        pipeline = pb.steps()
 
-        self.assertIsInstance(pipeline, Pipeline)
+        self.assertIsInstance(pipeline, StepBuilder)
         self.assertEqual(pipeline._context, self.context)
 
     def test_pipelineBuilderShuoldUpdateLoaderParameters(self):
@@ -327,36 +331,38 @@ class DatasourceInstanceTestCase(TestCase):
             "dimensions": [ 'yolo', 'yolo2' ],
             "metrics": [ 'yolo3', 'yolo4' ],
             "sort": [ [ 'country', 'asc' ] ],
-            "take": "100"
+            "take": "100",
+            "testing": {
+                "calculated": {},
+                "metrics": {}
+            }
         })
 
     def test_pipelineShouldRunThePipelineAndGetTheResult(self):
         reply = ResponseMock({
             "Success": True,
             "Data": {
-                "data": {
-                    "meta": [{
-                        "name": "a",
-                        "type": "String",
-                        "internalName": "a"
-                    }, {
-                        "name": "number_of_rows",
-                        "type": "UInt64",
-                        "internalName": "number_of_rows"
-                    }],
-                    "data": [{
-                        "a": "3",
-                        "number_of_rows": 1
-                    }],
-                    "totals": None,
-                    "rows": 1,
-                    "rows_before_limit_at_least": 3,
-                    "hasErrors": False,
-                    "errorMessage": None,
-                    "display": "overall"
-                    },
-                "hints": {}
-            }
+                "meta": [{
+                    "name": "a",
+                    "type": "String",
+                    "internalName": "a"
+                }, {
+                    "name": "number_of_rows",
+                    "type": "UInt64",
+                    "internalName": "number_of_rows"
+                }],
+                "data": [{
+                    "a": "3",
+                    "number_of_rows": 1
+                }],
+                "totals": None,
+                "rows": 1,
+                "rows_before_limit_at_least": 3,
+                "hasErrors": False,
+                "errorMessage": None,
+                "display": "overall"
+            },
+            "hints": {}
         })
         self.context.http.post = MagicMock(return_value=reply)
 
@@ -364,7 +370,7 @@ class DatasourceInstanceTestCase(TestCase):
             "my params": "my value"
         }
 
-        p = Pipeline('base url', params, self.context)
+        p = StepBuilder('base url', params, self.context)
 
         def transform(element, panel):
             return {
@@ -375,7 +381,7 @@ class DatasourceInstanceTestCase(TestCase):
 
         p.transform(transform)
 
-        self.assertEqual(p.execute(), {
+        self.assertEqual(p.build().execute(), {
             "dataset": 'the dataset',
             "meta": "my meta",
             "element": {
@@ -397,7 +403,24 @@ class DatasourceInstanceTestCase(TestCase):
             }
         })
 
-        self.context.http.post.assert_called_with('base url/$$base', params)
+        self.context.http.post.assert_called_with('base url/debugQuery', params)
+
+    def test_loaderShouldExceptIfAnErrorOccurs(self):
+        reply = ResponseMock({
+            "Data": {
+                'hasErrors': True,
+                'errorMessage': "The error"
+            }
+        })
+        self.context.http.post = MagicMock(return_value=reply)
+
+        params = {
+            "my params": "my value"
+        }
+
+        p = StepBuilder('base url', params, self.context)
+
+        self.assertRaises(StatwolfException, p.build().execute)
 
     def test_itShouldDeleteAdatasource(self):
         self.context.http.post = MagicMock()
@@ -413,3 +436,72 @@ class DatasourceInstanceTestCase(TestCase):
             }
         })
 
+    def test_pipelineShouldGetTheCurrentQuery(self):
+        pipeline = []
+        query = { 'a': 'query' }
+
+        p = Pipeline(query, pipeline, self.context);
+
+        self.assertEqual(query, p.query());
+
+    def test_pipelineBuilderShouldDefineCalculatedDimensions(self):
+        pb = PipelineBuilder('sourceid', 'nase url', self.context)
+
+        pb.calculated('yolo', 'some sql')
+
+        self.assertEqual(pb._params["testing"]["calculated"]["yolo"], "some sql")
+
+    def test_pipelineBuilderShouldDefineCustomMetrics(self):
+        pb = PipelineBuilder('sourceid', 'nase url', self.context)
+
+        pb.customMetric('yolo', sql='some sql')
+
+        self.assertEqual(pb._params["testing"]["metrics"]["yolo"], {
+            "type": "sql",
+            "sql": "some sql"
+        })
+
+    def test_pipelineBuilderShouldDefineAJoin(self):
+        pb = PipelineBuilder('sourceid', 'nase url', self.context)
+
+        pb.join('my join', 'any left', [ 'pippo', 'test' ], [ 'pluto', 'other' ], 'yolo.table')
+        pb.join('other join', 'any left', [ 'pippo' ], [ 'pluto' ], sql='with sql')
+        pb.join('second join', 'any left', [ 'pippo' ], [ 'pluto' ])
+
+        self.assertEqual(pb._params["testing"]["calculated"]["my join"], {
+            "join": "any left",
+            "query": "select pluto, other, pippo, test from yolo.table",
+            "by": ["pippo", "test"],
+            "fields": ["pluto", "other"]
+        })
+
+        self.assertEqual(pb._params["testing"]["calculated"]["other join"], {
+            "join": "any left",
+            "query": "with sql",
+            "by": ["pippo"],
+            "fields": ["pluto"]
+        })
+
+        self.assertEqual(pb._params["testing"]["calculated"]["second join"], {
+            "join": "any left",
+            "query": "select pluto, pippo",
+            "by": ["pippo"],
+            "fields": ["pluto"]
+        })
+
+    def test_pipelineBuilderShouldDefineOperatoMetrics(self):
+        pb = PipelineBuilder('sourceid', 'nase url', self.context)
+
+        pb.customMetric("yolo", operator="count")
+        pb.customMetric("nolo", operator="avg", field='my field')
+
+        self.assertEqual(pb._params["testing"]["metrics"]["yolo"], {
+            "operator": "count"
+        })
+        self.assertEqual(pb._params["testing"]["metrics"]["nolo"], {
+            "operator": "avg",
+            "field": "my field"
+        })
+
+    def test_pipelineShouldOverrideQueryParametersOnExecute(self):
+        pass

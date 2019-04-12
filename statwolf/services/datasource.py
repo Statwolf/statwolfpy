@@ -5,6 +5,7 @@ from os.path import basename
 import json
 from dill.source import getsource
 from textwrap import dedent
+from copy import deepcopy
 
 class Field:
     def __init__(self, sourceid, field, getHint):
@@ -30,26 +31,62 @@ class Field:
         return self._field;
 
 class Pipeline(BaseService):
-    def __init__(self, baseUrl, params, context):
+    def __init__(self, query, pipeline, context):
         super(Pipeline, self).__init__(context)
 
+        self._query = query
+        self._pipeline = pipeline
+
+    def query(self):
+        return deepcopy(self._query)
+
+    def execute(self, override={}):
+        element = {
+            "meta": {},
+            "dataset": []
+        }
+
+        for h in self._pipeline:
+            panel = {
+                'statwolf': self._context.http,
+                'params': json.loads(h['params']),
+                'query': self._query
+            }
+            exec(h['source'], {}, { 'element': element, 'panel': panel })
+            element = panel['newElement']
+
+        return element
+
+
+class StepBuilder(BaseService):
+    def __init__(self, baseUrl, query, context):
+        super(StepBuilder, self).__init__(context)
+
         self._pipeline = []
+        self._query = query
 
         def loader(element, panel):
             params = panel['params']
-            res = panel['statwolf'].post(params['baseUrl'] + '/$$base', params['params']).json()["Data"]
+            res = panel['statwolf'].post(params['baseUrl'] + '/debugQuery', panel['query']).json()["Data"]
+
+            if res['hasErrors'] == True:
+                from statwolf import StatwolfException
+
+                raise StatwolfException(res['errorMessage'])
 
             return {
                 "meta": {
-                    "schema": res["data"]["meta"]
+                    "schema": res["meta"]
                 },
-                "dataset": res["data"]["data"]
+                "dataset": res["data"]
             }
 
         self.transform(loader, {
-            'params': params,
             'baseUrl': baseUrl
         })
+
+    def model(self, factory):
+        pass
 
     def transform(self, handler, params={}):
         source = dedent(getsource(handler))
@@ -62,21 +99,8 @@ class Pipeline(BaseService):
 
         return self
 
-    def execute(self):
-        element = {
-            "meta": {},
-            "dataset": []
-        }
-
-        for h in self._pipeline:
-            panel = {
-                'statwolf': self._context.http,
-                'params': json.loads(h['params'])
-            }
-            exec(h['source'], {}, { 'element': element, 'panel': panel })
-            element = panel['newElement']
-
-        return element
+    def build(self):
+        return Pipeline(self._query, self._pipeline, self._context)
 
 class PipelineBuilder(BaseService):
     def __init__(self, sourceid, baseUrl, context):
@@ -95,7 +119,11 @@ class PipelineBuilder(BaseService):
             "dimensions": [],
             "metrics": [],
             "sort": [],
-            "take": "5000"
+            "take": "5000",
+            "testing": {
+                "calculated": {},
+                "metrics": {}
+            }
         }
 
     def timeframe(self, dateFrom, dateTo):
@@ -108,6 +136,45 @@ class PipelineBuilder(BaseService):
 
     def dimensions(self, dimensions):
         self._params["dimensions"] = dimensions
+
+        return self
+
+    def calculated(self, field, sql):
+        self._params["testing"]["calculated"][field] = sql
+
+        return self
+
+    def customMetric(self, name, sql=None, operator=None, field=None):
+        definition = {}
+
+        if sql != None:
+            definition = {
+                "type": "sql",
+                "sql": sql
+            }
+        elif operator != None:
+            definition = {
+                "operator": operator
+            }
+            if field != None:
+                definition["field"] = field
+
+        self._params["testing"]["metrics"][name] = definition
+
+        return self
+
+    def join(self, name, joinType, by, fields, table=None, sql=None):
+        if sql == None:
+            sql = 'select ' + ', '.join(fields + by)
+            if table != None:
+                sql = sql + ' from ' + table
+
+        self._params["testing"]["calculated"][name] = {
+            "join": "any left",
+            "query": sql,
+            "by": by,
+            "fields": fields
+        }
 
         return self
 
@@ -141,8 +208,8 @@ class PipelineBuilder(BaseService):
 
         return self
 
-    def build(self):
-        return Pipeline(self._baseUrl, self._params, self._context)
+    def steps(self):
+        return StepBuilder(self._baseUrl, self._params, self._context)
 
 class DatasourceInstance(BaseService):
     def __init__(self, sourceid, context):
