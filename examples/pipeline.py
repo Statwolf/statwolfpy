@@ -18,7 +18,10 @@ def transformation(element, panel):
 pipeline = source.builder()\
         .calculated('yolo', 'formatDateTime(toDate(\'1987-04-22\'), \'%V\')')\
         .customMetric('myCount', operator="count")\
+        .customMetric('myAvg', operator="avg", field="myCount")\
+        .customMetric('mySql', sql='1')\
         .join('my join', 'any left', ['yolo'], ['mytext'], sql='select formatDateTime(toDate(\'1987-04-22\'), \'%V\') as yolo, \'birthday\' as mytext')\
+        .join('my join', 'any left', ['yolo'], ['mytext'], table='table.name')\
         .dimensions(['yolo', 'mytext'])\
         .metrics(['myCount'])\
         .steps()\
