@@ -254,7 +254,7 @@ class UploaderPanel:
 
     def push(self, data):
         data = list(map(self._parser, data))
-        self._file.write('\n'.join(data))
+        self._file.write('\n'.join(data) + '\n')
 
     def remove(self):
         self._file.remove()

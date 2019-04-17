@@ -134,7 +134,7 @@ class DatasourceInstanceTestCase(TestCase):
         p = UploaderPanel(fm, parser)
         p.push(['data', 'to', 'write'])
 
-        fm.write.assert_called_with('yolo\nyolo\nyolo')
+        fm.write.assert_called_with('yolo\nyolo\nyolo\n')
         parser.assert_has_calls(list(map(call, ['data', 'to', 'write'])))
 
     def test_uploaderPanelShouldCloseTheFile(self):
