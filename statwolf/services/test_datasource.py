@@ -503,5 +503,21 @@ class DatasourceInstanceTestCase(TestCase):
             "field": "my field"
         })
 
-    def test_pipelineShouldOverrideQueryParametersOnExecute(self):
-        pass
+    def test_pipelineBuilderShouldDefineACustomModel(self):
+        pb = PipelineBuilder('sourceid', 'base url', self.context)
+
+        def factory(builder):
+            return builder.type("linear_regression").target("a field").features([
+                "a feature"
+            ]).build()
+
+        pb.model('customModel', factory)
+
+        self.assertEqual(pb._params["testing"]["metrics"]["customModel"], {
+            "type": "ml",
+            "store": True,
+            "model_type": "linear_regression",
+            "field": "customModel",
+            "target_name": "a field",
+            "feature_names": [ "a feature" ]
+        })

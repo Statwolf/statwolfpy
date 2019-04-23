@@ -69,7 +69,7 @@ class StepBuilder(BaseService):
             params = panel['params']
             res = panel['statwolf'].post(params['baseUrl'] + '/debugQuery', panel['query']).json()["Data"]
 
-            if res['hasErrors'] == True:
+            if res.get('hasErrors', False) == True:
                 from statwolf import StatwolfException
 
                 raise StatwolfException(res['errorMessage'])
@@ -85,9 +85,6 @@ class StepBuilder(BaseService):
             'baseUrl': baseUrl
         })
 
-    def model(self, factory):
-        pass
-
     def transform(self, handler, params={}):
         source = dedent(getsource(handler))
         source = source + 'panel["newElement"] = ' + handler.__name__ + '(element, panel)\n';
@@ -101,6 +98,32 @@ class StepBuilder(BaseService):
 
     def build(self):
         return Pipeline(self._query, self._pipeline, self._context)
+
+class ModelBuilder:
+    def __init__(self):
+        self._status = {
+            "model_type": "NOT DEFINED",
+            "target_name": "NOT DEFINED",
+            "feature_names": "NOT DEFINED"
+        }
+
+    def target(self, name):
+        self._status["target_name"] = name
+
+        return self
+
+    def features(self, features):
+        self._status["feature_names"] = features
+
+        return self
+
+    def type(self, name):
+        self._status["model_type"] = name
+
+        return self
+
+    def build(self):
+        return self._status
 
 class PipelineBuilder(BaseService):
     def __init__(self, sourceid, baseUrl, context):
@@ -210,6 +233,22 @@ class PipelineBuilder(BaseService):
 
     def steps(self):
         return StepBuilder(self._baseUrl, self._params, self._context)
+
+    def model(self, name, factory):
+        model = {
+            "field": name
+        }
+        model.update(factory(ModelBuilder()))
+
+        config = {
+            "type": "ml",
+            "store": True,
+        }
+        config.update(model)
+
+        self._params["testing"]["metrics"][name] = config
+
+        return self
 
 class DatasourceInstance(BaseService):
     def __init__(self, sourceid, context):
