@@ -1,6 +1,8 @@
 version: '3'
 services:
   develop:
+    environment:
+      - PYTHONPATH=/app
     volumes:
       - '.:/app'
     image: 'python:3.7.0'

@@ -13,4 +13,10 @@ source = service.explore("uploaded_my_test_222").builder()
 def linearRegression(b):
     return b.type('linear_regression').target('yolo').features([ 'myavg' ]).build()
 
-print(source.model('myLinearRegression', linearRegression).metrics(['myLinearRegression', 'myavg', 'yolo']).steps().build().execute())
+p = source.model('myLinearRegression', linearRegression).metrics(['myLinearRegression', 'myavg', 'yolo']).steps().build()
+
+print(p.execute())
+
+overrides = p.query().model('myLinearRegression', forceTraining=True)
+
+print(p.execute(overrides))

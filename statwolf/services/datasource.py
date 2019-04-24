@@ -38,25 +38,29 @@ class Pipeline(BaseService):
         self._pipeline = pipeline
 
     def query(self):
-        return deepcopy(self._query)
+        return FluentQueryEditor(deepcopy(self._query), self._context)
 
-    def execute(self, override={}):
+    def execute(self, override=None):
         element = {
             "meta": {},
             "dataset": []
         }
 
+        query = self._query
+
+        if override != None:
+            query = override._params
+
         for h in self._pipeline:
             panel = {
                 'statwolf': self._context.http,
                 'params': json.loads(h['params']),
-                'query': self._query
+                'query': query
             }
             exec(h['source'], {}, { 'element': element, 'panel': panel })
             element = panel['newElement']
 
         return element
-
 
 class StepBuilder(BaseService):
     def __init__(self, baseUrl, query, context):
@@ -66,12 +70,17 @@ class StepBuilder(BaseService):
         self._query = query
 
         def loader(element, panel):
+            from statwolf import StatwolfException
+
             params = panel['params']
-            res = panel['statwolf'].post(params['baseUrl'] + '/debugQuery', panel['query']).json()["Data"]
+            res = panel['statwolf'].post(params['baseUrl'] + '/debugQuery', panel['query']).json()
+
+            if res["Data"] == False:
+                raise StatwolfException('Invalid request: maybe an authentication error. Please check that host, username and password are correct')
+
+            res = res["Data"]
 
             if res.get('hasErrors', False) == True:
-                from statwolf import StatwolfException
-
                 raise StatwolfException(res['errorMessage'])
 
             return {
@@ -125,29 +134,11 @@ class ModelBuilder:
     def build(self):
         return self._status
 
-class PipelineBuilder(BaseService):
-    def __init__(self, sourceid, baseUrl, context):
-        super(PipelineBuilder, self).__init__(context)
+class FluentQueryEditor(BaseService):
+    def __init__(self, params, context):
+        super(FluentQueryEditor, self).__init__(context)
 
-        self._baseUrl = baseUrl
-
-        self._params = {
-            "table": sourceid,
-            "filter": {},
-            "timeframe": {
-                "period":"last7days",
-                "granularity":"day"
-            },
-            "granularity": "overall",
-            "dimensions": [],
-            "metrics": [],
-            "sort": [],
-            "take": "5000",
-            "testing": {
-                "calculated": {},
-                "metrics": {}
-            }
-        }
+        self._params = params
 
     def timeframe(self, dateFrom, dateTo):
         self._params["timeframe"] = {
@@ -231,24 +222,52 @@ class PipelineBuilder(BaseService):
 
         return self
 
-    def steps(self):
-        return StepBuilder(self._baseUrl, self._params, self._context)
+    def model(self, name, factory=None, forceTraining=False):
+        if name not in self._params["testing"]["metrics"] and factory == None:
+            raise StatwolfException('You must define a factory for model ' + name)
 
-    def model(self, name, factory):
-        model = {
-            "field": name
-        }
-        model.update(factory(ModelBuilder()))
+        if factory != None:
+            model = {
+                "field": name
+            }
+            model.update(factory(ModelBuilder()))
 
-        config = {
-            "type": "ml",
-            "store": True,
-        }
-        config.update(model)
+            config = {
+                "type": "ml",
+                "store": True
+            }
+            config.update(model)
 
-        self._params["testing"]["metrics"][name] = config
+            self._params["testing"]["metrics"][name] = config
+
+        self._params["testing"]["metrics"][name]["rebuild"] = forceTraining
 
         return self
+
+class PipelineBuilder(FluentQueryEditor):
+    def __init__(self, sourceid, baseUrl, context):
+        super(PipelineBuilder, self).__init__({
+            "table": sourceid,
+            "filter": {},
+            "timeframe": {
+                "period":"last7days",
+                "granularity":"day"
+            },
+            "granularity": "overall",
+            "dimensions": [],
+            "metrics": [],
+            "sort": [],
+            "take": "5000",
+            "testing": {
+                "calculated": {},
+                "metrics": {}
+            }
+        }, context)
+
+        self._baseUrl = baseUrl
+
+    def steps(self):
+        return StepBuilder(self._baseUrl, self._params, self._context)
 
 class DatasourceInstance(BaseService):
     def __init__(self, sourceid, context):

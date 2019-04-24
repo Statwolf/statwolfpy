@@ -2,10 +2,12 @@ from unittest import TestCase
 from unittest.mock import MagicMock, call
 
 from statwolf.services import datasource
-from statwolf.services.datasource import Datasource, DatasourceInstance, Upload, Parser, Blob, UploaderPanel, PipelineBuilder, StepBuilder, Pipeline
+from statwolf.services.datasource import Datasource, DatasourceInstance, Upload, Parser, Blob, UploaderPanel, PipelineBuilder, StepBuilder, Pipeline, FluentQueryEditor
 from statwolf import StatwolfException
 
 from statwolf.mocks import ContextMock, ResponseMock, FileMock
+
+from copy import deepcopy
 
 import json
 
@@ -442,7 +444,7 @@ class DatasourceInstanceTestCase(TestCase):
 
         p = Pipeline(query, pipeline, self.context);
 
-        self.assertEqual(query, p.query());
+        self.assertEqual(query, p.query()._params);
 
     def test_pipelineBuilderShouldDefineCalculatedDimensions(self):
         pb = PipelineBuilder('sourceid', 'nase url', self.context)
@@ -516,8 +518,122 @@ class DatasourceInstanceTestCase(TestCase):
         self.assertEqual(pb._params["testing"]["metrics"]["customModel"], {
             "type": "ml",
             "store": True,
+            "rebuild": False,
             "model_type": "linear_regression",
             "field": "customModel",
             "target_name": "a field",
             "feature_names": [ "a feature" ]
         })
+
+    def test_pipelineExecuteShouldOverrideFields(self):
+        reply = ResponseMock({
+            "Data": {
+                'meta': 'some meta',
+                'data': 'some data'
+            }
+        })
+        self.context.http.post = MagicMock(return_value=reply)
+
+        params = {
+            "table": "a table",
+            "filter": {},
+            "timeframe": {
+                "period":"last7days",
+                "granularity":"day"
+            },
+            "granularity": "overall",
+            "dimensions": [],
+            "metrics": [],
+            "sort": [],
+            "take": "5000",
+            "testing": {
+                "calculated": {},
+                "metrics": {
+                    "a model": {
+                        "rebuild": False
+                    }
+                }
+            }
+        }
+
+        newParams = deepcopy(params)
+        newParams["dimensions"] = [ 'custom dimension' ]
+        newParams["take"] = "10"
+
+        p = StepBuilder('base url', params, self.context).build()
+
+        overrides = p.query().dimensions([ 'custom dimension' ]).take("10")
+
+        p.execute(overrides)
+
+        self.context.http.post.assert_called_with('base url/debugQuery', newParams)
+
+    def test_modelDefinitionShouldExceptIfAFactoryIsNeverDefined(self):
+        params = {
+            "table": "a table",
+            "filter": {},
+            "timeframe": {
+                "period":"last7days",
+                "granularity":"day"
+            },
+            "granularity": "overall",
+            "dimensions": [],
+            "metrics": [],
+            "sort": [],
+            "take": "5000",
+            "testing": {
+                "calculated": {},
+                "metrics": {
+                    "a model": {
+                        "rebuild": False
+                    }
+                }
+            }
+        }
+        qb = FluentQueryEditor(params, self.context)
+
+        with self.assertRaises(StatwolfException):
+            qb.model('not exists')
+
+    def test_shouldExceptWithAuthErrorOnDataFalse(self):
+        reply = ResponseMock({
+            "Success": True,
+            "Data": False
+        })
+        self.context.http.post = MagicMock(return_value=reply)
+
+        params = {
+            "my params": "my value"
+        }
+
+        p = StepBuilder('base url', params, self.context)
+
+        self.assertRaises(StatwolfException, p.build().execute)
+
+
+    def test_modelDefinitionShouldForceModelTraining(self):
+        params = {
+            "table": "a table",
+            "filter": {},
+            "timeframe": {
+                "period":"last7days",
+                "granularity":"day"
+            },
+            "granularity": "overall",
+            "dimensions": [],
+            "metrics": [],
+            "sort": [],
+            "take": "5000",
+            "testing": {
+                "calculated": {},
+                "metrics": {
+                    "a model": {
+                        "rebuild": False
+                    }
+                }
+            }
+        }
+        qb = FluentQueryEditor(params, self.context)
+        qb.model('a model', forceTraining=True)
+
+        self.assertEqual(params['testing']['metrics']['a model']['rebuild'], True)
