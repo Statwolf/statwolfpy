@@ -637,3 +637,101 @@ class DatasourceInstanceTestCase(TestCase):
         qb.model('a model', forceTraining=True)
 
         self.assertEqual(params['testing']['metrics']['a model']['rebuild'], True)
+
+    def test_pipelineBuilderShouldUpdateTheDatasourceDefinition(self):
+        pb = PipelineBuilder("an id", '/root', self.context)
+
+        self.context.http.post = MagicMock(side_effect=[
+            ResponseMock({"Data": {
+                "fields": [{
+                    "field": "yolo"
+                }, {
+                    "field": "mySql",
+                    "test": "not me!"
+                }]
+            }}),
+            ResponseMock({"Data": {}}),
+            ResponseMock({"Data": {}})
+        ]);
+
+        model = { "my": "model" }
+        mlDef = {
+            "type": "ml",
+            "rebuild": False,
+            "store": True,
+            "field": "myModel"
+        }
+        mlDef.update(model)
+
+        def modelFactory(b):
+            return model
+
+        pb = pb.customMetric('mySql', 'an sql string').customMetric('myCount', operator='count').customMetric('myOperator', operator='an operator', field='a field').calculated('myCalculated', 'sql for calculated').model('myModel', modelFactory).update()
+
+        calls = [
+            call('/root/getDatasetInformation', {
+                "table": "an id",
+            }),
+            call('/root/setDatasetInformation', {
+                "table": "an id",
+                "payload": {
+                    "options": {},
+                    "fields": [{
+                        "field": "yolo"
+                    }, {
+                        "data_type": "Float64",
+                        "field": "mySql",
+                        "is_dimension": False,
+                        "is_filter": False,
+                        "is_visible": True,
+                        "type": "metric",
+                        "definition": {
+                            "type": "sql",
+                            "sql": "an sql string"
+                        }
+                    }, {
+                        "data_type": "String",
+                        "field": "myCalculated",
+                        "is_dimension": True,
+                        "is_filter": True,
+                        "is_visible": True,
+                        "type": "field",
+                        "definition": {
+                            "inline": "sql for calculated"
+                        }
+                    }, {
+                        "data_type": "Float64",
+                        "field": "myCount",
+                        "is_dimension": False,
+                        "is_filter": False,
+                        "is_visible": True,
+                        "type": "metric",
+                        "definition": {
+                            "operator": "count"
+                        }
+                    }, {
+                        "data_type": "Float64",
+                        "field": "myOperator",
+                        "is_dimension": False,
+                        "is_filter": False,
+                        "is_visible": True,
+                        "type": "metric",
+                        "definition": {
+                            "operator": "an operator",
+                            "field": "a field"
+                        }
+                    }, {
+                        "data_type": "Float64",
+                        "field": "myModel",
+                        "is_dimension": False,
+                        "is_filter": False,
+                        "is_visible": True,
+                        "type": "metric",
+                        "definition": mlDef
+                    }]
+                }
+            }),
+            call('/root/v1/full/getSchema', {'sourceid': 'an id'})
+        ]
+
+        self.context.http.post.assert_has_calls(calls)

@@ -266,6 +266,57 @@ class PipelineBuilder(FluentQueryEditor):
 
         self._baseUrl = baseUrl
 
+    def update(self):
+        reply = self.post(self._baseUrl + '/getDatasetInformation', {
+            "table": self._params["table"]
+        });
+
+        updates = {};
+
+        for field in reply.get("fields", []):
+            updates[field["field"]] = field
+
+        for key, value in self._params["testing"]["calculated"].items():
+            updates[key] = {
+                "data_type": "String",
+                "field": key,
+                "is_dimension": True,
+                "is_filter": True,
+                "is_visible": True,
+                "type": "field",
+                "definition": {
+                    "inline": value
+                }
+            }
+
+        for key, value in self._params["testing"]["metrics"].items():
+            metric = {}
+
+            if value.get("type", None) == "sql" or value.get("type", None) == "ml" or value.get("operator", None) != None:
+                metric = value
+            else:
+                continue
+
+            updates[key] = {
+                "data_type": "Float64",
+                "field": key,
+                "is_dimension": False,
+                "is_filter": False,
+                "is_visible": True,
+                "type": "metric",
+                "definition": metric
+            }
+
+        reply = self.post(self._baseUrl + '/setDatasetInformation', {
+            "table": self._params["table"],
+            "payload": {
+                "options": {},
+                "fields": list(updates.values())
+            }
+        });
+
+        return DatasourceInstance(self._params["table"], self._context)
+
     def steps(self):
         return StepBuilder(self._baseUrl, self._params, self._context)
 
