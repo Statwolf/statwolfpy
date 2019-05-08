@@ -5,6 +5,9 @@ from statwolf.services import datasource
 from statwolf.services.datasource import Datasource, DatasourceInstance, Upload, Parser, Blob, UploaderPanel, PipelineBuilder, StepBuilder, Pipeline, FluentQueryEditor
 from statwolf import StatwolfException
 
+import pandas
+from pandas.util.testing import assert_frame_equal
+
 from statwolf.mocks import ContextMock, ResponseMock, FileMock
 
 from copy import deepcopy
@@ -264,6 +267,14 @@ class DatasourceInstanceTestCase(TestCase):
         panel.push.assert_called_with([ 'a', 'b', 'c' ])
         fm.close.assert_called_with()
 
+    def test_dataLoaderShouldExceptIfTriesToPostEmptyDataFor1000Iterations(self):
+        def source(panel):
+            pass
+
+        p = Upload('sourceid', 'label', self.context).source(source).json()
+
+        self.assertRaises(StatwolfException, p.upload)
+
     def test_textParserShouldJustRemoveTrailingLineTerminators(self):
         text = Parser("source", 'label', 'handler', self.context).text()
 
@@ -383,27 +394,24 @@ class DatasourceInstanceTestCase(TestCase):
 
         p.transform(transform)
 
-        self.assertEqual(p.build().execute(), {
-            "dataset": 'the dataset',
-            "meta": "my meta",
-            "element": {
-                "dataset": [{
-                    "a": "3",
-                    "number_of_rows": 1
-                }],
-                "meta": {
-                    "schema": [{
-                        "name": "a",
-                        "type": "String",
-                        "internalName": "a"
-                    }, {
-                        "name": "number_of_rows",
-                        "type": "UInt64",
-                        "internalName": "number_of_rows"
-                    }]
-                }
-            }
-        })
+        res = p.build().execute()
+        self.assertEqual(res['dataset'], 'the dataset');
+        self.assertEqual(res['meta'], 'my meta');
+        self.assertEqual(res['element']['meta'], {
+            "schema": [{
+                "name": "a",
+                "type": "String",
+                "internalName": "a"
+            }, {
+                "name": "number_of_rows",
+                "type": "UInt64",
+                "internalName": "number_of_rows"
+            }]
+        });
+        assert_frame_equal(res['element']['dataset'], pandas.DataFrame([{
+            "a": "3",
+            "number_of_rows": 1
+        }]));
 
         self.context.http.post.assert_called_with('base url/debugQuery', params)
 
@@ -529,7 +537,7 @@ class DatasourceInstanceTestCase(TestCase):
         reply = ResponseMock({
             "Data": {
                 'meta': 'some meta',
-                'data': 'some data'
+                'data': []
             }
         })
         self.context.http.post = MagicMock(return_value=reply)

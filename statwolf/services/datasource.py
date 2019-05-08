@@ -71,6 +71,7 @@ class StepBuilder(BaseService):
 
         def loader(element, panel):
             from statwolf import StatwolfException
+            import pandas
 
             params = panel['params']
             res = panel['statwolf'].post(params['baseUrl'] + '/debugQuery', panel['query']).json()
@@ -87,7 +88,7 @@ class StepBuilder(BaseService):
                 "meta": {
                     "schema": res["meta"]
                 },
-                "dataset": res["data"]
+                "dataset": pandas.DataFrame(res["data"])
             }
 
         self.transform(loader, {
@@ -360,10 +361,18 @@ class UploaderPanel:
     def __init__(self, tmpFile, parser):
         self._file = tmpFile
         self._parser = parser
+        self._hasData = False
 
     def push(self, data):
         data = list(map(self._parser, data))
+        self._hasData = len(data) > 0
         self._file.write('\n'.join(data) + '\n')
+
+    def hasData(self):
+        ret = self._hasData
+        self._hasData = False
+
+        return ret
 
     def remove(self):
         self._file.remove()
@@ -382,8 +391,17 @@ class Blob(BaseService):
         self._panel = UploaderPanel(context.tempFile(), parser)
 
     def upload(self):
+        watchdog = 0
+
         while self._source(self._panel) is not False:
-            pass
+            if self._panel.hasData() == True:
+                watchdog = 0
+            else:
+                watchdog = watchdog + 1
+
+            if watchdog == 1001:
+                raise StatwolfException('Max empty data limit. Remember to return False from your source function when the end is reached.')
+
         location = self._panel.close()
         filename = basename(location)
         blob, baseUrl = self._context.blob()
